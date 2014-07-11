@@ -14,7 +14,7 @@
  *
  */
 definition(
-    name: "Set Mode According To Presence",
+    name: "Here or Not",
     namespace: "botvinik",
     author: "Bruno Botvinik",
     description: "Change mode automatically according to family's members presence",
