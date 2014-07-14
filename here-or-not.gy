@@ -27,23 +27,23 @@ preferences {
 	section("Select people's presence that will control your home's mode") {
 		input "people", "capability.presenceSensor", multiple: true
 	}
-
-	section("When everybody is away change to this mode") {
-		input "awayMode", "mode", title: "Mode?"
-	}
-
-	section("When someone is at home change to this mode") {
-		input "homeMode", "mode", title: "Mode?"
-	}
-
-	section("Delay before switching to 'away' mode (defaults to ${awayModeDelayDefault()} min)") {
-		input "awayModeDelay", "decimal", title: "Number of minutes", required: false
-	}
-
-	section("Ignore presence changes when your home's mode is set to:") {
-		input "ignoreModes", "mode", title: "Mode?", multiple: true
+    
+	section("Mode settings") {
+		input "awayMode", "mode", title: "When everybody is away change to this mode", required: true
+		input "homeMode", "mode", title: "When someone is at home change to this mode", required: true
+		input "awayModeDelay", "decimal", title: "Delay before switching to 'away' mode (defaults to ${awayModeDelayDefault()} min.)", required: false
+		input "ignoreModes", "mode", title: "Ignore presence changes when your home's mode is set to:", multiple: true
+		input "modeNotify", "enum", title: "Send notification when mode changes?", metadata:[values:["Yes", "No"]], required: false
 	}
 	
+	section("Select contact sensors to check when everybody is away") {
+		input "contacts", "capability.contactSensor", multiple: true, required: false
+	}
+
+	section( "Notifications" ) {
+		input "sendPushMessage", "enum", title: "Send a push notification?", metadata:[values:["Yes", "No"]], required: false
+		input "smsNotification", "phone", title: "Send a text message?", required: false
+	}
 }
 
 def installed() {
@@ -106,11 +106,16 @@ def takeAction()
 		log.debug "Found ${awayLongEnough.size()} out of ${people.size()} person(s) who were away long enough"
 		if (awayLongEnough.size() == people.size()) {
 			setLocationMode(awayMode)
+            notifyChangePush(true)
+            notifyChangeSms(true)
+            checkContacts()
 		} else {
 			log.debug "not everyone has been away long enough; doing nothing"
 		}
 	} else {
 		setLocationMode(homeMode)
+        notifyChangePush(false)
+        notifyChangeSms(false)
 		log.debug "someone is at home; changing to 'home' mode"
 	}
 }
@@ -126,7 +131,6 @@ private ignorePresenceChange() {
         	modes =  ignoreModes   
         
         for (mode in modes) {
-        	log.debug "${location.mode} ${mode}"
             if (location.mode == mode)
             	return true
         }
@@ -147,9 +151,52 @@ private everyoneIsAway()
 	return result
 }
 
+private checkContacts() {
+
+	def warning = ""
+    for (contact in contacts) {
+        if (contact.currentContact == "open") {
+        	warning = warning + "${contact.displayName} is open. "
+        }
+    }
+    
+    if (warning != "") {
+    	if (sendPushMessage != null && sendPushMessage == "Yes") {
+        	sendPush("WARNING: ${warning}")
+        }
+        
+        if (smsNotification != null && smsNotification != "") {
+        	sendSms(smsNotification, "WARNING: ${warning}")
+        }
+	}
+}
+
 private findFalseAlarmThreshold() {
 	(awayModeDelay != null && awayModeDelay != "") ? awayModeDelay : awayModeDelayDefault()
 }
+
+private notifyChangePush(isAway) {
+	
+    if (modeNotify != null && modeNotify == "Yes" && sendPushMessage != null && sendPushMessage == "Yes") {
+		log.debug "Sending push notification"
+		if (isAway)
+            sendPush("See you soon! Mode is now ${awayMode}")
+        else
+            sendPush("Welcome back! Mode is now ${homeMode}")    
+	}
+}
+
+private notifyChangeSms(isAway) {
+
+	if (modeNotify != null && modeNotify == "Yes" && smsNotification != null && smsNotification != "") {
+		log.debug "Sending sms notification"
+		if (isAway)
+        	sendSms(smsNotification, "See you soon! Mode is now ${awayMode}")
+    	else
+    		sendSms(smsNotification, "Welcome back! Mode is now ${homeMode}")
+	}
+}
+
 
 private awayModeDelayDefault() {
 	return 3
